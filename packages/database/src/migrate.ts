@@ -12,7 +12,7 @@ try {
   await connection.query('INSERT INTO migrations VALUES ($1)',[name]);
  }
  await connection.query('COMMIT');
- console.log(JSON.stringify({event:'migrations_complete'}));
+ console.log(JSON.stringify({event:'migrations_complete',msg:'Database migrations complete'}));
 } catch(error) {
  await connection.query('ROLLBACK');throw error;
 } finally {
