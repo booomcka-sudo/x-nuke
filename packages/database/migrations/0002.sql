@@ -1,0 +1,13 @@
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS generation integer NOT NULL DEFAULT 1;
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS demo boolean NOT NULL DEFAULT true;
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS profile_id text;
+ALTER TABLE scan_requests ADD COLUMN IF NOT EXISTS username text;
+UPDATE scan_requests r SET username=j.username FROM scan_jobs j WHERE j.id=r.job_id AND r.username IS NULL;
+CREATE INDEX IF NOT EXISTS jobs_reconciliation ON scan_jobs(status,retry_at);
+CREATE INDEX IF NOT EXISTS jobs_profile_mode ON scan_jobs(profile_id,demo);
+CREATE TABLE IF NOT EXISTS x_profile_aliases(username text PRIMARY KEY,profile_id text NOT NULL REFERENCES x_profiles(id),updated_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS profile_alias_account ON x_profile_aliases(profile_id);
+CREATE TABLE IF NOT EXISTS worker_heartbeats(instance_id uuid PRIMARY KEY,updated_at timestamptz NOT NULL DEFAULT now(),demo boolean NOT NULL);
+CREATE INDEX IF NOT EXISTS heartbeats_date ON worker_heartbeats(updated_at);
+CREATE INDEX IF NOT EXISTS events_job_date ON scan_events(job_id,created_at);
+CREATE INDEX IF NOT EXISTS snapshots_job_date ON audience_snapshots(job_id,created_at);

@@ -1,73 +1,117 @@
 # X Nuke — Alpha Scanner
 
-Монорепозиторий закрытого MVP: расширение Chrome MV3, Fastify API, PostgreSQL, Redis и BullMQ worker. Интерфейс английский. Все данные DEMO помечены; LIVE никогда не подменяется демоданными.
+Закрытый MVP: Chrome/Opera MV3, React в Shadow DOM, Fastify, PostgreSQL/Drizzle и Redis/BullMQ. Интерфейс английский, инструкции русские.
 
-## Локальный DEMO
+## Использование
 
-Требуются Node.js 22+, pnpm 10.18.3 и Docker Engine с Linux containers.
+1. Установите apps/extension/dist через режим разработчика в chrome://extensions или opera://extensions → Load unpacked.
+2. Откройте Settings & sign in. Здесь проверяются API, режим, worker, наличие провайдеров и первого аккаунта.
+3. Войдите email и паролем X Nuke. Cookies и пароль X не используются.
+4. На профиле x.com или twitter.com нажмите Scan. Quick Scan обрабатывает профиль и первую страницу аудитории.
+5. Start Deep Scan продолжает сохранённый cursor. Можно сразу выбрать Deep Scan в popup.
+6. Закрытие панели прекращает polling; повторное открытие восстанавливает скан без нового запроса и расхода квоты.
+7. View Full Report показывает формулу, аудиторию, публичные кошельки и источники; доступны Export JSON и Print.
 
-```powershell
-corepack enable
-corepack prepare pnpm@10.18.3 --activate
-pnpm install --frozen-lockfile
-Copy-Item .env.example .env
-```
+DEMO явно обозначен и содержит синтетические данные. Ошибка LIVE не подменяется демонстрационным результатом.
 
-Замените JWT_SECRET в `.env` случайной строкой длиной минимум 32 символа.
+## Railway
 
-```powershell
-docker compose up -d --build
-$env:ADMIN_EMAIL='admin@example.com'
-$env:ADMIN_PASSWORD='choose-a-long-unique-password'
-docker compose exec -e ADMIN_EMAIL -e ADMIN_PASSWORD api pnpm user:create
-pnpm --filter @xn/extension build:dev
-pnpm zip
-```
+Для API и worker Root Directory /, ветка main.
 
-Откройте `chrome://extensions`, включите Developer mode, Load unpacked → `apps/extension/dist`. В Settings расширения войдите созданным пользователем. Откройте `https://x.com/solbuilder` (в DEMO аккаунт может быть любым), нажмите Scan. Первый результат сохраняется после первой страницы, следующие страницы расширяют выборку. Закрытие панели останавливает polling, задача продолжает работать. Повторное Scan восстанавливает общий серверный результат с отдельным запросом в истории.
+| Сервис | Config File Path | Домен |
+|---|---|---|
+| API | /railway.json | Публичный HTTPS |
+| worker | /deploy/railway.worker.json | Не нужен |
+| Postgres | База Railway | Не нужен |
+| Redis | База Railway | Не нужен |
 
-Для локального профиля: `pnpm --filter @xn/extension dev`, затем `http://localhost:5173/solbuilder` с установленной dev-сборкой. Без установленного расширения fixture показывает ошибку подключения, а не демонстрирует работающий backend.
+Конфиги выбирают Dockerfile. Build/Start overrides оставьте пустыми. У worker отключите Serverless/App Sleeping. Redis должен сохранять данные и использовать noeviction.
 
-Детерминированные DEMO-сценарии: `notfound` — нет профиля, `private` — закрытый профиль, `noaccess` — нет доступа к followers, `empty` — пустая аудитория, `ratelimit` — 429 с ограниченными повторами. Обычный аккаунт: до 300 проверенных подписчиков, итоговая отметка `sample_limit` при лимите. Порядок и показатели синтетических аккаунтов воспроизводимы; время обновления фактическое.
+В Variables обоих приложений:
 
-## LIVE и доступы
+    DATABASE_URL=${{Postgres.DATABASE_URL}}
+    REDIS_URL=${{Redis.REDIS_URL}}
+    JWT_SECRET=случайная_строка_минимум_32_символа
+    DEMO_MODE=true
 
-Установите `DEMO_MODE=false`, `X_PROVIDER=official`, задайте `X_API_BEARER_TOKEN`. Нужен доступ приложения X к user lookup, followers и user posts. Доступность зависит от прав и оплаченных возможностей приложения; ошибки 401/403/429 показываются явно. Приватные endpoint, cookies и пользовательская сессия X не используются.
+Имена сервисов в reference variables должны совпадать с фактическими. Остальные лимиты — в .env.example.
 
-`HELIUS_API_KEY` нужен для текущих балансов публично подтверждённых кошельков. Адаптер также предоставляет ограниченные signatures и token accounts. Это не история себестоимости и не PnL. DexScreener-адаптер получает текущие пары Solana без ключа; исторические цены не поддерживает. `BIRDEYE_API_KEY` зарезервирован и в текущем MVP не используется.
+### Первый аккаунт
 
-Метки импортируются только серверной CLI с доступом к PostgreSQL:
+В Variables API добавьте ADMIN_EMAIL и ADMIN_PASSWORD (12+ символов). Pre-deploy выполняет миграции и защищённую CLI bootstrap-команду. Она создаёт только первого пользователя под advisory lock и не меняет существующие пароли. После создания удалите ADMIN_PASSWORD.
 
-```powershell
-pnpm labels:import docs/labels.example.json
-```
+Для ручного создания пользователя в SSH-контейнере API: pnpm user:create. Используются ADMIN_EMAIL и ADMIN_PASSWORD серверного окружения. Открытой регистрации нет. Пароль хешируется scrypt, access token действует 15 минут, refresh token ротируется и отзывается при logout.
 
-Файл содержит массив публично проверенных меток с X user ID, URL доказательства и временем проверки. Не импортируйте пример как реальные данные. Большой баланс или похожий ник не дают Smart Money. Для этой категории нужны wallet, confidence ≥0.8, ≥10 закрытых сделок, положительный realizedPnl, период и `historyQuality=sufficient`. Администратор отвечает за проверку источников. В поставке нет неподтверждённых «реальных» wallet labels.
+### LIVE
 
-## Проверки и сборки
+У API и worker должны совпадать DEMO_MODE=false, X_PROVIDER=official, X_API_BEARER_TOKEN и необходимые ключи провайдеров.
 
-```powershell
-pnpm typecheck
-pnpm lint
-pnpm test
-pnpm test:e2e
-pnpm exec tsc -p tsconfig.server.json
-pnpm --filter @xn/extension build:dev
-pnpm zip
-```
+X_API_BEARER_TOKEN — Bearer Token приложения X, НЕ Consumer Key Secret. Нужны разрешения user lookup, followers и user posts. Наличие токена не гарантирует endpoint entitlement. 401/403/429 и отсутствующие поля диагностируются явно.
 
-Результаты фактического запуска — `docs/verification.md`. API/worker компилируются в `dist/apps`. Настройки Railway — `docs/railway.md`. Производственный ZIP требует сборки с фактическим HTTPS origin Railway; dev ZIP предназначен для localhost.
+HELIUS_API_KEY нужен для балансов известных публично подтверждённых кошельков. Баланс и входящие переводы не считаются прибылью. DexScreener-адаптер предоставляет текущие token pairs Solana, без исторических цен. BIRDEYE_API_KEY зарезервирован, не используется.
 
-`pnpm build` собирает серверные приложения. `pnpm start` запускает API, `pnpm start:worker` запускает обработчик очереди. Расширение собирается отдельной командой выше, либо через `pnpm build:all` с заданным VITE_API_ORIGIN. Корневой railway.json автоматически выбирает Docker-сборку API; для второго сервиса worker укажите `/deploy/railway.worker.json`.
+### Расширение
 
-## Метод и ограничения
+Node.js 22+, pnpm 10.18.3, PowerShell:
 
-Формула `heuristic-1`: Smart Money 30, Crypto KOLs 20, Engagement 15, Track Record 15, Audience Authenticity 10, Network Overlap 10. При минимум двух доступных компонентах и сумме весов ≥40 оценка перенормируется; иначе `null`. Все оценки предварительные. Уверенность учитывает объём выборки, долю известных категорий и доступные веса; это эвристика, не статистическая вероятность.
+    pnpm install --frozen-lockfile
+    $env:VITE_API_ORIGIN='https://ВАШ-API.up.railway.app'
+    pnpm --filter @xn/extension build
+    pnpm zip
 
-Audience: ровно одна основная категория на проверенный аккаунт, Unknown входит в знаменатель. Слабые признаки не дают обвинений в ботах. Total Follower Reach — сумма, допускающая пересечения. Unique и Alpha Reach недоступны без графа пересечений. PnL, история проектов и достоверность аудитории не выдумываются.
+Результаты: apps/extension/dist и artifacts/x-nuke-extension.zip. Production manifest разрешает только заданный API origin и content scripts X. Ключи провайдеров остаются на сервере.
 
-Quick и Deep используют одну последовательную серверную задачу: первая страница даёт быстрый предварительный результат, дальнейшие страницы работают автоматически. Поле режима сохраняется в личной истории; ручная пауза/отмена и отдельная приоритизация очередей в MVP отсутствуют. Время 5–15 секунд — цель при доступных API, не гарантия. При задержке показан реальный этап.
+## Локально
 
-Дедупликация действует по нормализованному username, режиму данных и версии формулы; смена username одного X ID пока может создать отдельную задачу. Checkpoint, страницы, edges, результаты и события хранятся в PostgreSQL. Ключ BullMQ — SHA-256 без двоеточий. API восстанавливает постановку незавершённых задач каждые 15 секунд. Ограничение длительности проверяется между страницами и ограничивает активную работу; ожидание rate limit не считается активной работой. Нет автоматического удаление старой истории; настройте retention перед расширением доступа.
+    Copy-Item .env.example .env
+    pnpm install --frozen-lockfile
+    docker compose up -d --build
+    pnpm --filter @xn/extension build:dev
 
-Панель рисуется поверх страницы, не меняет колонки X. На маленьком экране её можно закрыть для доступа к X. Вложенный DOM X не читается для аналитики. Для SPA используются ограниченный observer и проверка только pathname, не непрерывный обход DOM.
+Задайте JWT_SECRET в .env; создайте пользователя через серверную CLI. Для локального профиля запустите pnpm --filter @xn/extension dev и откройте http://localhost:5173/solbuilder с установленной dev-сборкой.
+
+DEMO-сценарии: solbuilder — обычный профиль; notfound — не найден; private — закрытый; noaccess — нет доступа к аудитории; empty — пустая выборка; ratelimit — 429; deepfail — ошибка после первой страницы с сохранением предварительного результата.
+
+## Проверки
+
+    pnpm typecheck
+    pnpm lint
+    pnpm test
+    pnpm build
+    pnpm test:e2e
+    node scripts/check-manifest.mjs
+
+pnpm build компилирует API и worker; pnpm start и pnpm start:worker запускают их. pnpm build:all также собирает расширение и требует VITE_API_ORIGIN.
+
+Для PostgreSQL-тестов создайте отдельную локальную базу x_nuke_test:
+
+    $env:TEST_DATABASE_URL='postgres://USER:PASSWORD@127.0.0.1:5432/x_nuke_test'
+    pnpm test:db
+
+Runner запрещает другое имя и удалённый host. Тесты очищают выделенную тестовую базу. CI в .github/workflows/ci.yml проверяет PostgreSQL 16, Redis 7, реальные API/worker, установленное MV3-расширение и Docker build обоих образов. Фактические результаты — docs/verification.md.
+
+## Формула и доказательства
+
+Версия heuristic-2. Веса: Smart Money 30%, Crypto KOLs 20%, Engagement 15%, Track Record 15%, Audience Authenticity 10%, Network Overlap 10%.
+
+- Smart Money: подтверждённый кошелёк и метод связи, confidence ≥0.8, положительный realized PnL, период, достаточная история и минимум 10 закрытых сделок.
+- Crypto KOLs: публичная метка либо crypto-биография и ≥10 000 подписчиков.
+- Audience Authenticity — явно обозначенный proxy полноты публичного профиля: не проверка личности и не определение ботов.
+- Track Record и Network Overlap остаются null без независимых доказательств.
+- Score появляется при двух доступных компонентах и сумме весов ≥40; доступные веса перенормируются. Иначе Insufficient data.
+- Coverage — проверенная доля аудитории; confidence — отдельная эвристика качества данных, а не статистическая вероятность.
+- Одна основная категория аккаунта; Unknown входит в знаменатель. Отображаемые проценты распределяются до 0.1%, суммой 100.0%.
+- Total Follower Reach — сумма подписчиков проверенных аккаунтов с возможными повторами. Unique и Alpha Reach недоступны без графа пересечений.
+- Wallet report разделяет realized/unrealized PnL, комиссии, период и закрытые сделки. Неизвестные значения — null с причиной. В LIVE PnL поступает только из проверенного импорта, а не из балансов.
+
+Импорт публичных меток: pnpm labels:import path/to/verified-labels.json, только защищённая серверная CLI с доступом к БД. Формат Label — packages/shared/src/index.ts. Администратор проверяет URL доказательства, время, метод и историю; совпадение ника/аватара не даёт владение. docs/labels.example.json пуст намеренно.
+
+## Надёжность и ограничения
+
+PostgreSQL хранит cursor, поколения задач, стабильный X ID, edges, snapshots, результаты и события. Страница и результат сохраняются одной транзакцией; повторная доставка защищена advisory lock. BullMQ jobId — SHA-256. Несколько пользователей используют общий публичный анализ с отдельными запросами и проверкой прав.
+
+Сбой Redis не теряет сохранённый запрос: reconciliation восстановит очередь. При 429 учитываются Retry-After, backoff и jitter; максимум пять попыток. Бюджеты ограничивают аккаунты, страницы, активную длительность, wallet enrichment, concurrency и дневные запросы. Время проверяется между вызовами: текущий запрос может занять до 12 дополнительных секунд.
+
+sample_limit не означает анализ всей аудитории. Нет скрытых endpoint, cookies, обхода X, удалённого JS или фиктивного прогресса. Недостаток тарифа, истории цен, wallet labels или пересечений показывается как ограничение. Ручная пауза/отмена и автоматическая retention-политика не входят в MVP. Публикация в Chrome Web Store требует отдельной отправки, privacy policy и материалов листинга.
+
+Подробности: docs/railway.md и docs/providers.md.
