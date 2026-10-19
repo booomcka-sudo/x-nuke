@@ -1,0 +1,1 @@
+export async function send<T>(message:unknown):Promise<T>{if(!globalThis.chrome?.runtime?.id)throw Error('Install the extension and sign in through Settings');const result=await chrome.runtime.sendMessage(message);if(result.error)throw Error(result.error);return result.data as T;}

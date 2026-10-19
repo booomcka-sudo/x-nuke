@@ -1,0 +1,15 @@
+CREATE TABLE users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),email text UNIQUE NOT NULL,password_hash text NOT NULL);
+CREATE TABLE sessions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL REFERENCES users(id),token_hash text UNIQUE NOT NULL,expires_at timestamptz NOT NULL,revoked boolean NOT NULL DEFAULT false);
+CREATE TABLE x_profiles(id text PRIMARY KEY,username text NOT NULL,data jsonb NOT NULL,updated_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX profiles_username ON x_profiles(lower(username));
+CREATE TABLE scan_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),key text UNIQUE NOT NULL,username text NOT NULL,status text NOT NULL DEFAULT 'queued',stage text NOT NULL DEFAULT 'Resolving profile',checkpoint jsonb NOT NULL DEFAULT '{}',result jsonb,pages integer NOT NULL DEFAULT 0,processed integer NOT NULL DEFAULT 0,reason text,retry_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE scan_requests(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL REFERENCES users(id),job_id uuid NOT NULL REFERENCES scan_jobs(id),mode text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX requests_user_date ON scan_requests(user_id,created_at DESC);
+CREATE TABLE audience_snapshots(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),job_id uuid NOT NULL REFERENCES scan_jobs(id),data jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE follower_edges(job_id uuid NOT NULL REFERENCES scan_jobs(id),account_id text NOT NULL,data jsonb NOT NULL,PRIMARY KEY(job_id,account_id));
+CREATE TABLE account_labels(account_id text PRIMARY KEY,data jsonb NOT NULL);
+CREATE TABLE wallets(address text PRIMARY KEY,network text NOT NULL DEFAULT 'solana');
+CREATE TABLE account_wallet_links(account_id text NOT NULL,address text NOT NULL REFERENCES wallets(address),data jsonb NOT NULL,PRIMARY KEY(account_id,address));
+CREATE TABLE wallet_metrics(address text PRIMARY KEY REFERENCES wallets(address),data jsonb NOT NULL,updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE scan_results(job_id uuid PRIMARY KEY REFERENCES scan_jobs(id),formula_version text NOT NULL,data jsonb NOT NULL,updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE scan_events(id bigserial PRIMARY KEY,job_id uuid NOT NULL REFERENCES scan_jobs(id),data jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());

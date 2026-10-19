@@ -1,0 +1,13 @@
+import {describe,it,expect} from 'vitest';
+import {analyze,classify,weightedScore} from '../packages/scoring/src/index.js';
+import {DemoX,OfficialX,ProviderError} from '../packages/providers/src/index.js';
+import {profileRoute,usernameSchema} from '../packages/shared/src/index.js';
+describe('honest scoring',()=>{
+ it('does not invent missing components',()=>{expect(weightedScore([{name:'one',weight:30,value:80,reason:'test',sources:[]}]).score).toBeNull();expect(weightedScore([{name:'one',weight:30,value:80,reason:'test',sources:[]},{name:'two',weight:20,value:40,reason:'test',sources:[]},{name:'missing',weight:50,value:null,reason:'missing',sources:[]}])).toEqual({score:64,availableWeight:50});});
+ it('uses one category and sample denominator',async()=>{const demo=new DemoX();const profile=await demo.getProfile('solbuilder');const page=await demo.getFollowersPage(profile.id);const members=page.accounts.map(account=>classify(account,[]));const result=analyze(profile,members,[],true);expect(result.audience.reduce((sum,item)=>sum+item.count,0)).toBe(50);expect(result.audience.reduce((sum,item)=>sum+item.percent,0)).toBeCloseTo(100);expect(result.reach.unique).toBeNull();expect(result.reach.alpha).toBeNull();});
+ it('handles empty sample',async()=>{const result=analyze(await new DemoX().getProfile('empty'),[],[],true);expect(result.score).toBeNull();expect(result.audience.every(item=>item.percent===0)).toBe(true);});
+ it('requires more than a wallet balance for Smart Money',async()=>{const profile=await new DemoX().getProfile('example');expect(classify(profile,[{accountId:profile.id,category:'Smart Money',source:'https://example.com',verifiedAt:new Date().toISOString(),confidence:1,wallet:'abc'}]).category).toBe('Unknown / Insufficient Data');});
+ it('paginates deterministically without overlap',async()=>{const demo=new DemoX();const first=await demo.getFollowersPage('demo');const second=await demo.getFollowersPage('demo',first.cursor);expect(new Set([...first.accounts,...second.accounts].map(account=>account.id)).size).toBe(100);expect(second.cursor).toBe('100');});
+ it('LIVE never falls back to demo',async()=>{await expect(new OfficialX('').getProfile('solbuilder')).rejects.toEqual(new ProviderError('missing_x_api_key'));});
+});
+describe('routes',()=>{it('rejects system routes and normalizes usernames',()=>{for(const path of ['/home','/explore','/i/status/123','/settings/profile','/foo/status/1'])expect(profileRoute(path)).toBeNull();expect(profileRoute('/SolBuilder')).toBe('solbuilder');expect(usernameSchema.parse('@SolBuilder')).toBe('solbuilder');});});

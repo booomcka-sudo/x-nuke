@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","compilerOptions":{"outDir":"dist","rootDir":"."},"include":["apps/api/src/**/*.ts","apps/worker/src/**/*.ts","packages/**/*.ts"],"exclude":["**/*.test.ts"]}
