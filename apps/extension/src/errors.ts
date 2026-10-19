@@ -1,4 +1,5 @@
 const messages:Record<string,string>={
+ database_migrations_required:'Database setup is incomplete. Configure API pre-deploy: pnpm db:migrate && pnpm user:bootstrap, then redeploy.',
  unauthorized:'Sign in to X Nuke to scan this profile.',invalid_session:'Your session expired. Please sign in again.',invalid_credentials:'Email or password is incorrect.',
  daily_quota_exceeded:'Your daily scan budget is exhausted. Try again tomorrow (UTC).',rate_limited:'The provider is rate limited. Background retries are scheduled automatically.',
  provider_access_denied:'Your X API account does not have access to this endpoint.',missing_x_api_key:'The server administrator must configure X_API_BEARER_TOKEN for LIVE mode.',

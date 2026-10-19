@@ -24,6 +24,9 @@ describe.skipIf(process.env.RUN_DATABASE_TESTS!=='true')('PostgreSQL + API + per
   await database.query('DROP SCHEMA public CASCADE');await database.query('CREATE SCHEMA public');
   await database.query('CREATE TABLE migrations(name text PRIMARY KEY)');
   for(const migration of ['0001','0002']){await database.query(await readFile(new URL('../packages/database/migrations/'+migration+'.sql',import.meta.url),'utf8'));await database.query('INSERT INTO migrations VALUES($1)',[migration]);}
+  const {bootstrapAccount}=await import('../apps/api/src/users.js');
+  expect(await bootstrapAccount()).toBe('unconfigured');
+  const bootstrapped=await Promise.all([bootstrapAccount('first@example.test',password),bootstrapAccount('first@example.test',password)]);expect(bootstrapped.sort()).toEqual(['created','exists']);
   for(let index=0;index<users.length;index++)await database.query('INSERT INTO users(id,email,password_hash) VALUES($1,$2,$3)',[users[index],emails[index],hashPassword(password)]);
   const {createApp}=await import('../apps/api/src/server.js');
   app=await createApp({logging:false,dispatch:async(id,generation)=>{dispatched.push({id,generation});},queueReady:async()=>true});

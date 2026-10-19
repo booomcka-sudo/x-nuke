@@ -21,10 +21,10 @@ export async function createApp(dependencies:Dependencies={}) {
   const failure=error as {statusCode?:number;code?:string};
   const status=failure.statusCode??503;
   if(status>=500)app.log.error({code:failure.code??'unavailable'},'Request failed');
-  return reply.code(status).send({error:error instanceof HttpError?error.message:status===401?'unauthorized':status===429?'rate_limited':'service_unavailable'});
+  return reply.code(status).send({error:failure.code==='42P01'||failure.code==='42703'?'database_migrations_required':error instanceof HttpError?error.message:status===401?'unauthorized':status===429?'rate_limited':'service_unavailable'});
  });
  app.get('/health/live',async()=>({ok:true}));
- app.get('/health/ready',async(_request,reply)=>{try{await query('SELECT 1');await queueReady();return {ok:true,mode:config.DEMO_MODE?'DEMO':'LIVE'};}catch{return reply.code(503).send({ok:false});}});
+ app.get('/health/ready',async(_request,reply)=>{try{const migration=await query("SELECT name FROM migrations WHERE name='0002'");if(!migration.rowCount)return reply.code(503).send({ok:false,reason:'database_migrations_required'});await query('SELECT 1 FROM users,worker_heartbeats LIMIT 0');await queueReady();return {ok:true,mode:config.DEMO_MODE?'DEMO':'LIVE'};}catch{return reply.code(503).send({ok:false,reason:'database_or_queue_not_ready'});}});
  app.get('/v1/status',async()=>{
   const initialized=(await query('SELECT EXISTS(SELECT 1 FROM users) AS initialized')).rows[0].initialized;
   const worker=(await query("SELECT EXISTS(SELECT 1 FROM worker_heartbeats WHERE demo=$1 AND updated_at>now()-interval '40 seconds') AS online",[config.DEMO_MODE])).rows[0].online;

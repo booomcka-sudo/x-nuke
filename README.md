@@ -94,7 +94,7 @@ Runner запрещает другое имя и удалённый host. Тес
 
 Версия heuristic-2. Веса: Smart Money 30%, Crypto KOLs 20%, Engagement 15%, Track Record 15%, Audience Authenticity 10%, Network Overlap 10%.
 
-- Smart Money: подтверждённый кошелёк и метод связи, confidence ≥0.8, положительный realized PnL, период, достаточная история и минимум 10 закрытых сделок.
+- Smart Money: подтверждённый кошелёк и метод связи, confidence ≥0.8, положительный realized PnL с явной валютой USD, период, достаточная история и минимум 10 закрытых сделок.
 - Crypto KOLs: публичная метка либо crypto-биография и ≥10 000 подписчиков.
 - Audience Authenticity — явно обозначенный proxy полноты публичного профиля: не проверка личности и не определение ботов.
 - Track Record и Network Overlap остаются null без независимых доказательств.

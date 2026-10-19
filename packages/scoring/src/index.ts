@@ -1,7 +1,7 @@
 import {categories,VERSION,type Profile,type Post,type Label,type Member,type Component,type Analysis} from '../../shared/src/index.js';
 
 export function hasHistory(label:Label) {
- return !!(label.wallet&&label.method&&label.confidence>=0.8&&(label.closedTrades??0)>=10&&label.period&&label.historyQuality==='sufficient'&&(label.realizedPnl??0)>0);
+ return !!(label.wallet&&label.method&&label.confidence>=0.8&&(label.closedTrades??0)>=10&&label.period&&label.historyQuality==='sufficient'&&label.pnlCurrency==='USD'&&(label.realizedPnl??0)>0);
 }
 export function classify(profile:Profile,labels:Label[]):Member {
  const label=labels.find(item=>item.accountId===profile.id);

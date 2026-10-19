@@ -74,7 +74,7 @@ export class OfficialX implements XDataProvider {
  }
 }
 export function demoLabels(accounts:Profile[]):Label[] {
- return accounts.filter(account=>/^signal_\d+$/.test(account.username)&&Number(account.username.split('_')[1])%10===0).map(account=>({accountId:account.id,category:'Smart Money',source:'https://example.com/demo-evidence/'+account.username,verifiedAt:'2026-10-19T00:00:00Z',wallet:'Demo'+'1'.repeat(27)+String(Number(account.username.split('_')[1])%9+1)+String(Number(account.username.split('_')[1])%8+1),method:'Synthetic DEMO fixture; not a real ownership claim',confidence:0.95,closedTrades:20,realizedPnl:1200,unrealizedPnl:75,fees:12,period:'Synthetic 90-day history',historyQuality:'sufficient'}));
+ return accounts.filter(account=>/^signal_\d+$/.test(account.username)&&Number(account.username.split('_')[1])%10===0).map(account=>({accountId:account.id,category:'Smart Money',source:'https://example.com/demo-evidence/'+account.username,verifiedAt:'2026-10-19T00:00:00Z',wallet:'Demo'+'1'.repeat(27)+String(Number(account.username.split('_')[1])%9+1)+String(Number(account.username.split('_')[1])%8+1),method:'Synthetic DEMO fixture; not a real ownership claim',confidence:0.95,closedTrades:20,realizedPnl:1200,pnlCurrency:'USD',unrealizedPnl:75,fees:12,period:'Synthetic 90-day history',historyQuality:'sufficient'}));
 }
 export class DemoX implements XDataProvider {
  getCapabilities(){return {followers:true,posts:true,limitations:['DEMO: deterministic synthetic accounts and wallet labels']};}

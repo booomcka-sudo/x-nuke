@@ -4,6 +4,8 @@ import {randomUUID} from 'node:crypto';
 import {hashPassword} from '../apps/api/src/auth.js';
 const enabled=process.env.RUN_INTEGRATION==='true';
 test.skipIf(!enabled)('real API + worker: session rotation, ownership, shared job, checkpoint and history',async()=>{
+ const address=new URL(process.env.DATABASE_URL!);const api=new URL(process.env.TEST_API_ORIGIN??'http://localhost:3000');
+ if(!['127.0.0.1','localhost'].includes(address.hostname)||address.pathname!=='/x_nuke_test'||!['127.0.0.1','localhost'].includes(api.hostname))throw Error('Integration tests require disposable local services and database x_nuke_test');
  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});const origin=process.env.TEST_API_ORIGIN??'http://localhost:3000';const ids=[randomUUID(),randomUUID()];const emails=ids.map(id=>`${id}@example.test`);const password='integration-test-password';const ownedJobs=new Set<string>();
  const call=async(path:string,token?:string,body?:unknown)=>{const response=await fetch(origin+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined});return {status:response.status,data:await response.json()};};
  try{for(let index=0;index<ids.length;index++)await pool.query('INSERT INTO users(id,email,password_hash) VALUES($1,$2,$3)',[ids[index],emails[index],hashPassword(password)]);

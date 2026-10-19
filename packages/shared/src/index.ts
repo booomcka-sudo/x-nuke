@@ -8,7 +8,7 @@ export function profileRoute(path:string){const parts=path.split('/').filter(Boo
 export const scanSchema=z.object({username:usernameSchema,mode:z.enum(['quick','deep']).default('quick')}).strict();
 export interface Profile {id:string;username:string;name:string;description:string;followers:number|null;following:number|null;posts:number|null;protected:boolean;avatar?:string;source:string;observedAt:string;createdAt?:string}
 export interface Post {id:string;likes:number;reposts:number;replies:number;source:string}
-export interface Label {accountId:string;category:Category;source:string;verifiedAt:string;wallet?:string;method?:string;confidence:number;closedTrades?:number;realizedPnl?:number;unrealizedPnl?:number;fees?:number;period?:string;historyQuality?:string}
+export interface Label {accountId:string;category:Category;source:string;verifiedAt:string;wallet?:string;method?:string;confidence:number;closedTrades?:number;realizedPnl?:number;unrealizedPnl?:number;fees?:number;pnlCurrency?:'USD';period?:string;historyQuality?:string}
 export interface WalletEvidence {address:string;network:'solana';source:string;verifiedAt:string;confidence:number;method:string;accountId:string;metrics:{balanceSol:number|null;realizedPnl:number|null;unrealizedPnl:number|null;fees:number|null;closedTrades:number|null;period:string|null;historyQuality:string;source:string;observedAt:string;limitations:string[]}}
 export interface Member {profile:Profile;category:Category;reason:string;tags:string[];sources:string[];wallet?:Label}
 export interface Component {name:string;weight:number;value:number|null;reason:string;sources:string[]}
