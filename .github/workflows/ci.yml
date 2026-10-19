@@ -15,11 +15,11 @@ jobs:
           POSTGRES_PASSWORD: local_ci_only
           POSTGRES_DB: x_nuke_test
         ports: ['5432:5432']
-        options: --health-cmd 'pg_isready -U nuke_test' --health-interval 5s --health-retries 10
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
       redis:
         image: redis:7-alpine
         ports: ['6379:6379']
-        options: --health-cmd 'redis-cli ping' --health-interval 5s --health-retries 10
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
     env:
       DATABASE_URL: postgres://nuke_test:local_ci_only@127.0.0.1:5432/x_nuke_test
       TEST_DATABASE_URL: postgres://nuke_test:local_ci_only@127.0.0.1:5432/x_nuke_test
