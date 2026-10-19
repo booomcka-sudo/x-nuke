@@ -58,6 +58,8 @@ pnpm zip
 
 Результаты фактического запуска — `docs/verification.md`. API/worker компилируются в `dist/apps`. Настройки Railway — `docs/railway.md`. Производственный ZIP требует сборки с фактическим HTTPS origin Railway; dev ZIP предназначен для localhost.
 
+`pnpm build` собирает серверные приложения. `pnpm start` запускает API, `pnpm start:worker` запускает обработчик очереди. Расширение собирается отдельной командой выше, либо через `pnpm build:all` с заданным VITE_API_ORIGIN. Корневой railway.json автоматически выбирает Docker-сборку API; для второго сервиса worker укажите `/deploy/railway.worker.json`.
+
 ## Метод и ограничения
 
 Формула `heuristic-1`: Smart Money 30, Crypto KOLs 20, Engagement 15, Track Record 15, Audience Authenticity 10, Network Overlap 10. При минимум двух доступных компонентах и сумме весов ≥40 оценка перенормируется; иначе `null`. Все оценки предварительные. Уверенность учитывает объём выборки, долю известных категорий и доступные веса; это эвристика, не статистическая вероятность.
