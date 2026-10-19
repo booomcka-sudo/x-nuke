@@ -5,6 +5,7 @@
     "dockerfilePath": "deploy/Dockerfile.api"
   },
   "deploy": {
+    "startCommand": "node dist/apps/api/src/index.js",
     "preDeployCommand": ["pnpm deploy:prepare"],
     "healthcheckPath": "/health/ready",
     "healthcheckTimeout": 120,
