@@ -37,7 +37,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck && pnpm lint && pnpm test && pnpm build
       - run: pnpm test:db
-      - run: pnpm db:migrate && pnpm user:bootstrap
+      - run: pnpm deploy:prepare
       - name: Start API and worker
         run: |
           pnpm start > /tmp/x-nuke-api.log 2>&1 &

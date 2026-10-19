@@ -5,7 +5,7 @@
     "dockerfilePath": "deploy/Dockerfile.api"
   },
   "deploy": {
-    "preDeployCommand": ["pnpm db:migrate && pnpm user:bootstrap"],
+    "preDeployCommand": ["pnpm deploy:prepare"],
     "healthcheckPath": "/health/ready",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",

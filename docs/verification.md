@@ -9,9 +9,11 @@
 - два Playwright UI-теста: Shadow DOM, Scan/Close, системный маршрут, отсутствие установленного расширения, категории/источники, повторное открытие, маленький экран;
 - production сборки API/worker, Vite/esbuild, manifest и ZIP.
 
-Полная CI-проверка .github/workflows/ci.yml использует PostgreSQL 16, Redis 7, реальные API и BullMQ worker, HTTP API, установленное MV3-расширение Chromium и Docker build обоих образов. Все эти этапы прошли успешно: https://github.com/booomcka-sudo/x-nuke/actions/runs/39183543654 (коммит b2c153a). В установленном расширении проверены вход, Quick Scan, продолжение Deep Scan, report и повторное открытие без увеличения количества запросов.
+Полная CI-проверка .github/workflows/ci.yml использует PostgreSQL 16, Redis 7, реальные API и BullMQ worker, HTTP API, установленное MV3-расширение Chromium и Docker build обоих образов. Все эти этапы прошли успешно: https://github.com/booomcka-sudo/x-nuke/actions/runs/39183959320 (коммит 98f3fa4). В установленном расширении проверены вход, Quick Scan, продолжение Deep Scan, report и повторное открытие без увеличения количества запросов.
 
-Локальный Docker не отвечает. PostgreSQL для тестов запущен в artifacts/pg-data и не использует существующую базу пользователя.
+Дополнительно проверен единый package script `pnpm deploy:prepare` на отдельной пустой PostgreSQL: миграции, первый bootstrap со статусом `created`, повторный запуск со статусом `exists`, ровно один пользователь после двух запусков. Тестовая база удалена после проверки.
+
+Локальный Docker не отвечает. Для PostgreSQL-тестов использовался отдельный кластер artifacts/pg-data; после проверок он остановлен. Существующая база пользователя не использовалась.
 
 Ранее развернутый API: /health/live и /health/ready — 200, DEMO; /v1/me без токена — 401. Новый /v1/status показывает mode, готовность первого аккаунта, наличие ключей и heartbeat worker; значения секретов не возвращаются.
 

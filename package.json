@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "db:migrate": "tsx packages/database/src/migrate.ts",
+    "deploy:prepare": "pnpm db:migrate && pnpm user:bootstrap",
     "user:create": "tsx apps/api/src/cli.ts user",
     "labels:import": "tsx apps/api/src/cli.ts labels",
     "dev:api": "tsx watch apps/api/src/index.ts",

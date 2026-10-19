@@ -38,7 +38,7 @@ DEMO явно обозначен и содержит синтетические 
 
 ### Первый аккаунт
 
-В Variables API добавьте ADMIN_EMAIL и ADMIN_PASSWORD (12+ символов). Pre-deploy выполняет миграции и защищённую CLI bootstrap-команду. Она создаёт только первого пользователя под advisory lock и не меняет существующие пароли. После создания удалите ADMIN_PASSWORD.
+В Variables API добавьте ADMIN_EMAIL и ADMIN_PASSWORD (12+ символов). Pre-deploy `pnpm deploy:prepare` выполняет миграции и защищённую CLI bootstrap-команду. Она создаёт только первого пользователя под advisory lock и не меняет существующие пароли. После создания удалите ADMIN_PASSWORD.
 
 Для ручного создания пользователя в SSH-контейнере API: pnpm user:create. Используются ADMIN_EMAIL и ADMIN_PASSWORD серверного окружения. Открытой регистрации нет. Пароль хешируется scrypt, access token действует 15 минут, refresh token ротируется и отзывается при logout.
 
