@@ -29,7 +29,7 @@ export async function request(url:string,init?:RequestInit):Promise<unknown> {
   const reset=Number(response.headers.get('x-rate-limit-reset')??0)*1000-Date.now();
   const parsed=retry?(Number.isFinite(Number(retry))?Number(retry)*1000:Date.parse(retry)-Date.now()):reset;
   const delay=Number.isFinite(parsed)&&parsed>0?parsed:3000;
-  const code=response.status===429?'rate_limited':response.status===404?'profile_not_found':response.status===401||response.status===403?'provider_access_denied':'provider_http_'+response.status;
+  const code=response.status===429?'rate_limited':response.status===402?'provider_payment_required':response.status===404?'profile_not_found':response.status===401||response.status===403?'provider_access_denied':'provider_http_'+response.status;
   throw new ProviderError(code,delay,response.status===429||response.status>=500);
  }
  try {

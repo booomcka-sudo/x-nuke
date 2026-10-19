@@ -1,5 +1,7 @@
 const messages:Record<string,string>={
- database_migrations_required:'Database setup is incomplete. Configure API pre-deploy: pnpm db:migrate && pnpm user:bootstrap, then redeploy.',
+ database_migrations_required:'Database setup is incomplete. Configure API pre-deploy: pnpm deploy:prepare, then redeploy.',
+ provider_payment_required:'The data provider requires payment (HTTP 402). Ask the server administrator to check the X API credit balance, billing and spending limit in the X Developer Console, then retry the scan.',
+ provider_http_402:'The data provider requires payment (HTTP 402). Ask the server administrator to check the X API credit balance, billing and spending limit in the X Developer Console, then retry the scan.',
  unauthorized:'Sign in to X Nuke to scan this profile.',invalid_session:'Your session expired. Please sign in again.',invalid_credentials:'Email or password is incorrect.',
  daily_quota_exceeded:'Your daily scan budget is exhausted. Try again tomorrow (UTC).',rate_limited:'The provider is rate limited. Background retries are scheduled automatically.',
  provider_access_denied:'Your X API account does not have access to this endpoint.',missing_x_api_key:'The server administrator must configure X_API_BEARER_TOKEN for LIVE mode.',
