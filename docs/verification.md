@@ -15,6 +15,8 @@
 
 Не выполнено:
 
+Дополнительная проверка готовности Railway: исправлено подключение BullMQ/ioredis. REDIS_URL теперь явно преобразуется в host, port, username/password, db и TLS; произвольное поле url в объекте RedisOptions не использовалось ioredis. Два регрессионных теста проверяют фактические параметры клиента для внутреннего Railway hostname и TLS. После исправления: 16 тестов успешно, один инфраструктурный тест пропущен; strict typecheck, lint и компиляция API/worker успешны. `pnpm@10.18.3 install --lockfile-only --frozen-lockfile --ignore-scripts` также выполнен успешно. Docker Engine при повторной проверке не ответил; проверка остановлена.
+
 - Полный интеграционный тест API → Redis/BullMQ → worker → PostgreSQL. Docker Desktop был запущен, но Engine вернул HTTP 500 на `/info`; до этого pipe отсутствовал. Docker build/Compose и запуск миграций на реальной БД вследствие этого не проверены.
 - `tests/integration.test.ts` пропущен по умолчанию. Он проверяет реальные login/refresh/logout, чужие отчёты (404), общий job для двух пользователей, сохранённые edges/checkpoint и итог. Для запуска поднимите DEMO Compose, задайте DATABASE_URL и `RUN_INTEGRATION=true`, выполните `pnpm test`. Пользователи теста удаляются, общий публичный анализ остаётся в БД.
 - Прерывание реального worker во время страницы и восстановление после рестарта требуют работающей инфраструктуры; атомарный page checkpoint реализован, но такой fault-injection не выполнен.

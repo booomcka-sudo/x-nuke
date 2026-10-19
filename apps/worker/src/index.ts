@@ -1,5 +1,6 @@
 import {Worker,UnrecoverableError} from 'bullmq';
 import {config} from '../../../packages/shared/src/config.js';
+import {redisOptions} from '../../../packages/shared/src/redis.js';
 import {query,pool,db} from '../../../packages/database/src/index.js';
 import {accountLabels} from '../../../packages/database/src/schema.js';
 import {DemoX,OfficialX,Helius,ProviderError,demoLabels} from '../../../packages/providers/src/index.js';
@@ -19,6 +20,6 @@ const worker=new Worker('analysis',async job=>{const started=Date.now();const ro
  if(pages===1){for(const member of members.filter(m=>m.wallet).slice(0,5)){if(!config.DEMO_MODE&&member.wallet){try{const data=await new Helius(config.HELIUS_API_KEY).getWalletSummary(member.wallet.wallet!);await query('INSERT INTO wallet_metrics VALUES($1,$2,now()) ON CONFLICT(address) DO UPDATE SET data=$2,updated_at=now()',[member.wallet.wallet,data]);}catch{checkpoint.limitations=[...(checkpoint.limitations??[]),'Wallet enrichment unavailable; PnL unknown'];}}}}
  }
  }catch(error){const transient=error instanceof ProviderError&&error.transient;const delay=error instanceof ProviderError?error.retryAfter:3000;const retry=transient||!(error instanceof ProviderError);const exhausted=job.attemptsMade>=4;await query('UPDATE scan_jobs SET status=$2,stage=$3,reason=$4,retry_at=$5,checkpoint=$6,updated_at=now() WHERE id=$1',[row.id,retry&&!exhausted?'paused':'failed',retry&&!exhausted?'Waiting for provider retry':'Scan failed',error instanceof ProviderError?error.code:'processing_error',retry&&!exhausted?new Date(Date.now()+delay):null,{...checkpoint,elapsed:(checkpoint.elapsed??0)+Date.now()-started}]);if(!retry)throw new UnrecoverableError(error instanceof Error?error.message:'processing_error');throw error;}
-},{connection:{url:config.REDIS_URL,maxRetriesPerRequest:null},concurrency:config.SCAN_CONCURRENCY,settings:{backoffStrategy:(attempts,_type,error)=>Math.max(error instanceof ProviderError?error.retryAfter:0,Math.min(60000,1000*2**attempts)) + Math.floor(Math.random()*1000)}});
+},{connection:redisOptions(config.REDIS_URL,true),concurrency:config.SCAN_CONCURRENCY,settings:{backoffStrategy:(attempts,_type,error)=>Math.max(error instanceof ProviderError?error.retryAfter:0,Math.min(60000,1000*2**attempts)) + Math.floor(Math.random()*1000)}});
 worker.on('error',error=>console.error(JSON.stringify({level:'error',event:'worker_error',message:error.message})));worker.on('completed',job=>console.log(JSON.stringify({level:'info',event:'completed',id:job.id})));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{void worker.close().then(()=>pool.end());});
