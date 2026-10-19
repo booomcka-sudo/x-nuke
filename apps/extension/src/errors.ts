@@ -1,4 +1,8 @@
 const messages:Record<string,string>={
+ sample_limit:'Sample budget reached. This analysis covers part of the audience.',
+ quick_scan:'Quick Scan complete. Deep Scan can expand the inspected sample.',
+ audience_exhausted:'All available audience pages have been inspected.',
+ duration_limit:'Time budget reached. The saved result covers the inspected sample.',
  database_migrations_required:'Database setup is incomplete. Configure API pre-deploy: pnpm deploy:prepare, then redeploy.',
  provider_payment_required:'The data provider requires payment (HTTP 402). Ask the server administrator to check the X API credit balance, billing and spending limit in the X Developer Console, then retry the scan.',
  provider_http_402:'The data provider requires payment (HTTP 402). Ask the server administrator to check the X API credit balance, billing and spending limit in the X Developer Console, then retry the scan.',
