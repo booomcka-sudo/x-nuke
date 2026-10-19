@@ -18,7 +18,7 @@ export function useScan(id:string|null) {
     const next=await send<ScanView>({type:'GET_SCAN',id});
     if(cancelled)return;
     setScan(next);setError('');
-    if(!['complete','failed'].includes(next.status)){timer=setTimeout(()=>void poll(),delay);delay=Math.min(delay*1.3,10000);}
+    if(!['complete','failed','cancelled'].includes(next.status)){timer=setTimeout(()=>void poll(),delay);delay=Math.min(delay*1.3,10000);}
    }catch(cause){
     if(cancelled)return;setError(explainError(cause));
     if(!/unauthorized|invalid_session|scan_not_found/.test(String(cause)))timer=setTimeout(()=>void poll(),Math.min(delay*=2,30000));
@@ -41,13 +41,14 @@ export function WalletDetails({wallet}:{wallet:WalletEvidence}) {
   {metrics.limitations.map(item=><p className="bio" key={item}>{item}</p>)}
  </details>;
 }
-interface Props {scan:ScanView|null;error:string;username?:string;busy?:boolean;onClose?:()=>void;onScan?:()=>void;onDeep?:()=>void;report?:boolean}
-export function Panel({scan,error,username,busy,onClose,onScan,onDeep,report=false}:Props) {
+interface Props {scan:ScanView|null;error:string;username?:string;busy?:boolean;onClose?:()=>void;onScan?:()=>void;onDeep?:()=>void;onStop?:()=>void;report?:boolean}
+export function Panel({scan,error,username,busy,onClose,onScan,onDeep,onStop,report=false}:Props) {
+ const [confirmDeep,setConfirmDeep]=useState(false);
  const result=scan?.result;
- const active=!!scan&&!['complete','failed'].includes(scan.status);
+ const active=!!scan&&!['complete','failed','cancelled'].includes(scan.status);
  const handle=result?.profile.username??username??scan?.username??'profile';
  const openSettings=()=>void send({type:'OPTIONS'}).catch(()=>{});
- const status=active?'Scanning':scan?.status==='failed'?'Scan failed':result?'Quick Scan':'Ready';
+ const status=active?'Scanning':scan?.status==='cancelled'?'Stopped':scan?.status==='failed'?'Scan failed':result?'Quick Scan':'Ready';
  return <aside className="panel" aria-label="X Nuke analysis">
   <header className="bar"><span className="brand"><span className="logo"><Icon name="nuke"/></span>Nuke</span><span className="scan-status"><i className={'dot '+(scan?.status==='failed'?'status-error':'online')}/>{status}</span><div className="tools"><button aria-label="Settings" onClick={openSettings}><Icon name="settings"/></button>{onClose&&<button aria-label="Close panel" onClick={onClose}><Icon name="close"/></button>}</div></header>
   {result?.demo&&<div className="notice">Demo · synthetic data for product evaluation</div>}
@@ -78,7 +79,9 @@ export function Panel({scan,error,username,busy,onClose,onScan,onDeep,report=fal
    <section className="section reach-section"><h2>Reach</h2><div className="reach-grid"><div><small>Total followers</small><strong>{format(result.reach.total)}</strong></div><div><small>Unique (est.)</small><strong className="unavailable">Not available</strong></div><div><small>Alpha</small><strong className="unavailable">Not available</strong></div></div><details className="method"><summary>How reach is measured</summary><p className="bio">{result.reach.method}. No intersection data.</p></details></section>
   </>}
   <section className="section deep-section"><div className="row"><h2><Icon name="bolt"/><span>Deep Scan</span></h2><small>{scan?.status??'Ready'}</small></div><div className="deep" role="status"><p>{scan?.stage??'Available after Quick Scan'}</p><div className="row"><small>{scan?.processed??0} inspected · {scan?.pages??0} pages</small>{result?.coverage!==null&&result?.coverage!==undefined&&<small>{result.coverage.toFixed(1)}% coverage</small>}</div>{result&&<div className="track deep-track"><div className="fill" style={{width:Math.min(100,result.coverage??0)+'%'}}/></div>}{scan?.reason&&<p className={scan.status==='failed'?'error':'bio'}>{explainError(scan.reason)}</p>}{scan?.retryAt&&<p className="bio">Retry after {new Date(scan.retryAt).toLocaleTimeString()}</p>}</div>
-   {result&&onDeep&&scan?.reason==='quick_scan'&&<button className="wide deep-action" disabled={busy||active} onClick={onDeep}>Start Deep Scan<Icon name="arrow"/></button>}
+   {active&&onStop&&<><button className="wide stop-action" onClick={onStop}>Stop scan</button><p className="bio">Stops new provider calls. A request already in flight may still be billed.</p></>}
+   {result&&onDeep&&scan?.reason==='quick_scan'&&<button className="wide deep-action" disabled={busy||active||(!scan.budget&&!result.demo)} onClick={()=>setConfirmDeep(true)}>Start Deep Scan<Icon name="arrow"/></button>}
+   {confirmDeep&&!active&&<div className="cost-confirm"><p>Deep Scan inspects up to {scan?.budget?.deepFollowers??(result?.demo?300:20)} followers in total, including the saved sample. {result?.demo?'DEMO uses synthetic data.':'X API charges per returned resource. Check your X spending limit before continuing.'}</p><button className="wide deep-action" onClick={()=>{setConfirmDeep(false);onDeep?.();}}>Confirm Deep Scan</button><button className="wide refresh-action" onClick={()=>setConfirmDeep(false)}>Keep current result</button></div>}
    {result&&onScan&&<button className="wide refresh-action" disabled={busy||active} onClick={onScan}><Icon name="refresh"/>{active?'Analysis in progress…':scan?.status==='failed'?'Retry scan':'Refresh Quick Scan'}</button>}
   </section>
   {result&&<details className="section wallet-section"><summary>Public wallet links <small>{result.wallets?.length??0} verified</small><span className="chevron">›</span></summary>{result.wallets?.length?result.wallets.map(wallet=><WalletDetails key={wallet.accountId+wallet.address} wallet={wallet}/>):<p className="bio">No sufficiently verified public wallet links in the inspected data. Username and avatar matches do not establish ownership.</p>}</details>}

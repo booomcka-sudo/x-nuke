@@ -1,4 +1,6 @@
 const messages:Record<string,string>={
+ user_cancelled:'Stopped by you. Saved results remain available. A shared analysis may continue for other users.',
+ paid_scan_confirmation_required:'Confirm the paid Deep Scan budget before starting. Update the extension if no confirmation is shown.',
  sample_limit:'Sample budget reached. This analysis covers part of the audience.',
  quick_scan:'Quick Scan complete. Deep Scan can expand the inspected sample.',
  audience_exhausted:'All available audience pages have been inspected.',

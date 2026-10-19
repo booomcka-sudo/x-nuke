@@ -19,8 +19,9 @@ test('installed MV3 extension: sign in, Quick Scan, Deep Scan and report through
   await page.getByRole('button',{name:'Sign in',exact:true}).click();await expect(page.getByRole('heading',{name:'Signed in',exact:true})).toBeVisible();
   await page.route('http://localhost:5173/extensiontest',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><title>Local extension fixture</title></head><body><h1>Local profile</h1></body></html>'}));
   await page.goto('http://localhost:5173/extensiontest');await page.getByRole('button',{name:'Scan @extensiontest'}).click();
+  await page.getByRole('button',{name:'Start Quick Scan',exact:true}).click();
   await expect(page.getByText('n = 50',{exact:true})).toBeVisible({timeout:20000});
-  await page.getByRole('button',{name:'Start Deep Scan',exact:true}).click();await expect(page.getByText('n = 300',{exact:true})).toBeVisible({timeout:20000});
+  await page.getByRole('button',{name:'Start Deep Scan',exact:true}) .click();await page.getByRole('button',{name:'Confirm Deep Scan',exact:true}).click();await expect(page.getByText('n = 300',{exact:true})).toBeVisible({timeout:20000});
   const nextPage=context.waitForEvent('page');await page.getByRole('button',{name:'View Full Report'}).click();const report=await nextPage;await expect(report.getByRole('heading',{name:'Public profile report'})).toBeVisible();await expect(report.getByText('n = 300',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Close panel'}).click();await page.reload();await page.getByRole('button',{name:'Scan @extensiontest'}).click();await expect(page.getByText('n = 300',{exact:true})).toBeVisible();
   const requests=(await pool.query('SELECT count(*)::int AS count FROM scan_requests r JOIN users u ON u.id=r.user_id WHERE u.email=$1',[email])).rows[0].count;expect(requests).toBe(2);

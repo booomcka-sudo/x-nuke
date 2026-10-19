@@ -5,7 +5,7 @@ try {
  await connection.query('BEGIN');
  await connection.query('SELECT pg_advisory_xact_lock(916621)');
  await connection.query('CREATE TABLE IF NOT EXISTS migrations(name text PRIMARY KEY)');
- for(const name of ['0001','0002']) {
+ for(const name of ['0001','0002','0003']) {
   const found=await connection.query('SELECT name FROM migrations WHERE name=$1',[name]);
   if(found.rowCount)continue;
   await connection.query(await readFile(new URL(`../migrations/${name}.sql`,import.meta.url),'utf8'));

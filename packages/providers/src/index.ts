@@ -6,7 +6,7 @@ export class ProviderError extends Error {
 }
 export interface XDataProvider {
  getProfile(username:string):Promise<Profile>;
- getFollowersPage(id:string,cursor?:string):Promise<{accounts:Profile[];cursor?:string}>;
+ getFollowersPage(id:string,cursor?:string,limit?:number):Promise<{accounts:Profile[];cursor?:string}>;
  getRecentPosts(id:string):Promise<Post[]>;
  getCapabilities():{followers:boolean;posts:boolean;limitations:string[]};
 }
@@ -63,8 +63,9 @@ export class OfficialX implements XDataProvider {
   if(!result.data)throw new ProviderError('profile_not_found');
   return convert(result.data);
  }
- async getFollowersPage(id:string,cursor?:string) {
-  const result=validate(z.object({data:z.array(xUser).optional(),meta:z.object({next_token:z.string().optional()}).optional()}),await this.get('users/'+encodeURIComponent(id)+'/followers?max_results=50&user.fields=description,public_metrics,protected,created_at'+(cursor?'&pagination_token='+encodeURIComponent(cursor):'')));
+ async getFollowersPage(id:string,cursor?:string,limit=50) {
+  const pageSize=z.number().int().min(1).max(1000).parse(limit);
+  const result=validate(z.object({data:z.array(xUser).optional(),meta:z.object({next_token:z.string().optional()}).optional()}),await this.get('users/'+encodeURIComponent(id)+'/followers?max_results='+pageSize+'&user.fields=description,public_metrics,protected,created_at'+(cursor?'&pagination_token='+encodeURIComponent(cursor):'')));
   return {accounts:(result.data??[]).map(convert),cursor:result.meta?.next_token};
  }
  async getRecentPosts(id:string) {
@@ -82,18 +83,18 @@ export class DemoX implements XDataProvider {
   if(username==='notfound')throw new ProviderError('profile_not_found');
   return {id:'demo-'+username,username,name:username==='solbuilder'?'Sol Builder':username,description:'Building on Solana. Open research, better signals.',followers:12480,following:312,posts:823,protected:username==='private',createdAt:'2021-01-01T00:00:00Z',source:'https://x.com/'+username,observedAt:'2026-10-19T00:00:00Z'};
  }
- async getFollowersPage(id:string,cursor?:string) {
+ async getFollowersPage(id:string,cursor?:string,limit=50) {
   if(id==='demo-ratelimit')throw new ProviderError('rate_limited',15000,true);
   if(id==='demo-noaccess')throw new ProviderError('provider_access_denied');
   if(id==='demo-deepfail'&&cursor)throw new ProviderError('deep_scan_failed');
   if(id==='demo-empty')return {accounts:[]};
   const offset=Number(cursor??0);
-  const accounts=await Promise.all(Array.from({length:Math.min(50,Math.max(0,12480-offset))},async(_,index)=>{
+  const accounts=await Promise.all(Array.from({length:Math.min(limit,Math.max(0,12480-offset))},async(_,index)=>{
    const number=offset+index;
    const profile=await this.getProfile('signal_'+number);
    return {...profile,id:id+'-'+number,followers:100+number*131,description:number%3===0?'Solana crypto researcher':number%3===1?'AI engineer':'Independent creator',posts:number%7===0?0:120};
   }));
-  return {accounts,cursor:offset+50<12480?String(offset+50):undefined};
+  return {accounts,cursor:offset+limit<12480?String(offset+limit):undefined};
  }
  async getRecentPosts(){return Array.from({length:10},(_,index)=>({id:'demo-'+index,likes:100+index*7,reposts:20,replies:15,source:'https://example.com/demo-post'}));}
 }

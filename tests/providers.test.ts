@@ -3,6 +3,10 @@ import {OfficialX,ProviderError,Helius,DexScreener,DemoX,demoLabels} from '../pa
 import {analyze,classify} from '../packages/scoring/src/index.js';
 import {explainError} from '../apps/extension/src/errors.js';
 afterEach(()=>vi.unstubAllGlobals());
+it('sends the small paid sample limit to X instead of slicing a larger paid response',async()=>{
+ const fetcher=vi.fn().mockResolvedValue(new Response(JSON.stringify({data:[]})));vi.stubGlobal('fetch',fetcher);
+ await new OfficialX('token').getFollowersPage('123',undefined,5);expect(new URL(fetcher.mock.calls[0][0]).searchParams.get('max_results')).toBe('5');
+});
 it('stops payment-required retries and explains current and saved legacy errors',async()=>{
  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:402})));
  await expect(new OfficialX('token').getProfile('example')).rejects.toMatchObject({code:'provider_payment_required',transient:false});

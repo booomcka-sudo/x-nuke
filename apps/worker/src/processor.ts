@@ -6,6 +6,7 @@ import {accountLabels} from '../../../packages/database/src/schema.js';
 import {config} from '../../../packages/shared/src/config.js';
 import {VERSION,type Profile,type Post,type Label,type Member,type WalletEvidence} from '../../../packages/shared/src/index.js';
 import {retryDelay} from '../../../packages/shared/src/retry.js';
+import {scanBudget} from '../../../packages/shared/src/budget.js';
 import {DemoX,OfficialX,Helius,ProviderError,demoLabels,type XDataProvider} from '../../../packages/providers/src/index.js';
 import {classify,analyze} from '../../../packages/scoring/src/index.js';
 import type {WorkItem} from '../../api/src/queue.js';
@@ -18,19 +19,25 @@ export async function processAnalysis(job:Pick<Job<WorkItem>,'data'|'attemptsMad
  let checkpoint:Checkpoint={};
  let locked=false;
  let operationStarted=Date.now();
+ const isCurrent=async()=>{const current=(await query('SELECT generation,status FROM scan_jobs WHERE id=$1',[job.data.id])).rows[0];return current?.generation===job.data.generation&&!['cancelled','complete','failed'].includes(current.status);};
  try {
   locked=(await lease.query('SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS locked',[job.data.id])).rows[0].locked;
   if(!locked)return;
   const row=(await query('SELECT * FROM scan_jobs WHERE id=$1',[job.data.id])).rows[0];
-  if(!row||row.generation!==job.data.generation||['complete','failed'].includes(row.status))return;
+  if(!row||row.generation!==job.data.generation||['complete','failed','cancelled'].includes(row.status))return;
+  const budget=scanBudget(row.demo);
   checkpoint=row.checkpoint;
   if(row.demo!==config.DEMO_MODE)throw new ProviderError('worker_mode_mismatch');
-  await query("UPDATE scan_jobs SET status='running',stage='Quick Scan · resolving profile',retry_at=null WHERE id=$1",[row.id]);
+  await query("UPDATE scan_jobs SET status='running',stage='Quick Scan · resolving profile',retry_at=null WHERE id=$1 AND generation=$2",[row.id,job.data.generation]);
   if(!checkpoint.profile) {
+   if(!await isCurrent())return;
    const profile=await source.getProfile(row.username);
+   if(!await isCurrent())return;
    const canonicalKey=createHash('sha256').update(`${row.demo?'demo':'live'}:${profile.id}:${VERSION}`).digest('hex');
    await lease.query('BEGIN');
    try {
+    const own=(await lease.query('SELECT generation FROM scan_jobs WHERE id=$1 FOR UPDATE',[row.id])).rows[0];
+    if(own.generation!==job.data.generation){await lease.query('ROLLBACK');return;}
     await lease.query('SELECT pg_advisory_xact_lock(hashtextextended($1,1))',[canonicalKey]);
     const canonical=(await lease.query('SELECT * FROM scan_jobs WHERE key=$1 AND id<>$2 FOR UPDATE',[canonicalKey,row.id])).rows[0];
     await lease.query('INSERT INTO x_profiles(id,username,data,updated_at) VALUES($1,$2,$3,now()) ON CONFLICT(id) DO UPDATE SET username=$2,data=$3,updated_at=now()',[profile.id,profile.username,profile]);
@@ -38,7 +45,7 @@ export async function processAnalysis(job:Pick<Job<WorkItem>,'data'|'attemptsMad
     if(canonical) {
      await lease.query('UPDATE scan_requests SET job_id=$2 WHERE job_id=$1',[row.id,canonical.id]);
      const expired=Date.now()-new Date(canonical.updated_at).getTime()>config.CACHE_TTL_SECONDS*1000;
-     if(canonical.status==='failed'||(expired&&canonical.status==='complete')) {
+     if(['failed','cancelled'].includes(canonical.status)||(expired&&canonical.status==='complete')) {
       await lease.query("UPDATE scan_jobs SET generation=generation+1,status='queued',stage='Refreshing profile',checkpoint=$2,pages=0,processed=0,reason=null,retry_at=null,updated_at=now() WHERE id=$1",[canonical.id,{deep:checkpoint.deep??false}]);
       await lease.query('DELETE FROM follower_edges WHERE job_id=$1',[canonical.id]);
      }else if(checkpoint.deep) {
@@ -52,10 +59,13 @@ export async function processAnalysis(job:Pick<Job<WorkItem>,'data'|'attemptsMad
    }catch(error){await lease.query('ROLLBACK');throw error;}
    const limitations=[...source.getCapabilities().limitations];
    let posts:Post[]=[];
-   try{posts=await source.getRecentPosts(profile.id);}catch(error){if(error instanceof ProviderError)limitations.push(`Posts unavailable: ${error.code}`);else throw error;}
+   if(!await isCurrent())return;
+   if(budget.fetchPosts){try{posts=await source.getRecentPosts(profile.id);}catch(error){if(error instanceof ProviderError)limitations.push(`Posts unavailable: ${error.code}`);else throw error;}}
+   else limitations.push('Recent posts disabled to reduce API cost; engagement is unavailable');
+   if(!await isCurrent())return;
    checkpoint={...checkpoint,profile,posts,limitations,done:profile.protected};
    if(profile.protected)limitations.push('Protected profile: audience unavailable');
-   await query("UPDATE scan_jobs SET checkpoint=$2 || jsonb_build_object('deep',coalesce((checkpoint->>'deep')::boolean,false) OR $3) WHERE id=$1",[row.id,checkpoint,checkpoint.deep??false]);
+   await query("UPDATE scan_jobs SET checkpoint=$2 || jsonb_build_object('deep',coalesce((checkpoint->>'deep')::boolean,false) OR $3) WHERE id=$1 AND generation=$4",[row.id,checkpoint,checkpoint.deep??false,job.data.generation]);
   }
   const profile=checkpoint.profile!;
   const labels=(await db.select().from(accountLabels)).map(row=>row.data as Label);
@@ -64,13 +74,17 @@ export async function processAnalysis(job:Pick<Job<WorkItem>,'data'|'attemptsMad
    const state=(await query('SELECT checkpoint,generation FROM scan_jobs WHERE id=$1',[row.id])).rows[0];
    if(state.generation!==job.data.generation)return;
    checkpoint.deep=state.checkpoint.deep;
+   const followerLimit=checkpoint.deep?budget.deepFollowers:budget.quickFollowers;
+   const limitReason=checkpoint.deep?'sample_limit':'quick_scan';
    let members=(await query('SELECT data FROM follower_edges WHERE job_id=$1 ORDER BY account_id',[row.id])).rows.map(row=>row.data as Member);
-   let reason=members.length>=config.SCAN_MAX_FOLLOWERS||pages>=config.SCAN_MAX_PAGES?'sample_limit':checkpoint.done?'audience_exhausted':(checkpoint.elapsed??0)>=config.SCAN_MAX_SECONDS*1000?'duration_limit':null;
+   let reason=members.length>=followerLimit?limitReason:pages>=config.SCAN_MAX_PAGES?'sample_limit':checkpoint.done?'audience_exhausted':(checkpoint.elapsed??0)>=config.SCAN_MAX_SECONDS*1000?'duration_limit':null;
    let additions:Member[]=[];
    if(!reason) {
     try {
-     const page=await source.getFollowersPage(profile.id,checkpoint.cursor);
-     const accepted=page.accounts.slice(0,config.SCAN_MAX_FOLLOWERS-members.length);
+     if(!await isCurrent())return;
+     const page=await source.getFollowersPage(profile.id,checkpoint.cursor,Math.min(row.demo?50:10,followerLimit-members.length));
+     if(!await isCurrent())return;
+     const accepted=page.accounts.slice(0,followerLimit-members.length);
      const currentLabels=row.demo?[...demoLabels(accepted),...labels]:labels;
      const known=new Set(members.map(member=>member.profile.id));
      additions=accepted.filter(account=>!known.has(account.id)).map(account=>classify(account,currentLabels));
@@ -89,6 +103,7 @@ export async function processAnalysis(job:Pick<Job<WorkItem>,'data'|'attemptsMad
    const links=walletLabels.filter(label=>label.wallet&&label.method&&label.confidence>=0.8&&(label.accountId===profile.id||members.some(member=>member.profile.id===label.accountId)));
    const wallets=checkpoint.wallets??[];
    for(const label of links) {
+    if(!await isCurrent())return;
     if(wallets.length>=config.SCAN_MAX_WALLETS||(checkpoint.elapsed??0)+Date.now()-operationStarted>=config.SCAN_MAX_SECONDS*1000)break;
     if(wallets.some(wallet=>wallet.accountId===label.accountId&&wallet.address===label.wallet))continue;
     let balanceSol:number|null=null;const limitations=['PnL requires complete cost basis, historical prices and fees'];
@@ -99,12 +114,13 @@ export async function processAnalysis(job:Pick<Job<WorkItem>,'data'|'attemptsMad
    }
    checkpoint.wallets=wallets;
    checkpoint.elapsed=(checkpoint.elapsed??0)+Date.now()-operationStarted;
-   reason=reason??(members.length>=config.SCAN_MAX_FOLLOWERS||pages>=config.SCAN_MAX_PAGES?'sample_limit':checkpoint.done?'audience_exhausted':checkpoint.elapsed>=config.SCAN_MAX_SECONDS*1000?'duration_limit':!checkpoint.deep?'quick_scan':null);
+   reason=reason??(members.length>=followerLimit?limitReason:pages>=config.SCAN_MAX_PAGES?'sample_limit':checkpoint.done?'audience_exhausted':checkpoint.elapsed>=config.SCAN_MAX_SECONDS*1000?'duration_limit':!checkpoint.deep?'quick_scan':null);
    const result=analyze(profile,members,checkpoint.posts??[],row.demo,checkpoint.limitations);
    result.wallets=wallets;
    await lease.query('BEGIN');
    try {
-    const live=(await lease.query('SELECT checkpoint FROM scan_jobs WHERE id=$1 FOR UPDATE',[row.id])).rows[0];
+    const live=(await lease.query('SELECT checkpoint,generation FROM scan_jobs WHERE id=$1 FOR UPDATE',[row.id])).rows[0];
+    if(live.generation!==job.data.generation){await lease.query('ROLLBACK');return;}
     if(live.checkpoint.deep){checkpoint.deep=true;if(reason==='quick_scan')reason=null;}
     for(const member of additions)await lease.query('INSERT INTO follower_edges VALUES($1,$2,$3) ON CONFLICT(job_id,account_id) DO NOTHING',[row.id,member.profile.id,member]);
     await lease.query('UPDATE scan_jobs SET result=$2,processed=$3,pages=$4,status=$5,stage=$6,reason=$7,checkpoint=$8,updated_at=now() WHERE id=$1 AND generation=$9',[row.id,result,members.length,pages,reason?'complete':'running',reason?'Analysis finished':'Deep Scan · expanding audience',reason,checkpoint,job.data.generation]);
@@ -117,6 +133,7 @@ export async function processAnalysis(job:Pick<Job<WorkItem>,'data'|'attemptsMad
    operationStarted=Date.now();
   }
  }catch(error) {
+  if(!await isCurrent())return;
   const retry=!(error instanceof ProviderError)||error.transient;
   const exhausted=job.attemptsMade>=4;
   const reason=error instanceof ProviderError?error.code:'processing_error';

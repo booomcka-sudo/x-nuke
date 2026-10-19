@@ -7,7 +7,8 @@ import {scanSchema,usernameSchema} from '../../../packages/shared/src/index.js';
 import {query} from '../../../packages/database/src/index.js';
 import {analysisQueue,enqueue} from './queue.js';
 import {verifyPassword,tokenHash,newToken,hashPassword} from './auth.js';
-import {HttpError,requestScan,readScan} from './scans.js';
+import {HttpError,requestScan,readScan,cancelScan} from './scans.js';
+import {scanBudget} from '../../../packages/shared/src/budget.js';
 import {checkReadiness} from './readiness.js';
 
 interface Dependencies {dispatch?:typeof enqueue;queueReady?:()=>Promise<unknown>;logging?:boolean}
@@ -33,7 +34,7 @@ export async function createApp(dependencies:Dependencies={}) {
  app.get('/v1/status',async()=>{
   const initialized=(await query('SELECT EXISTS(SELECT 1 FROM users) AS initialized')).rows[0].initialized;
   const worker=(await query("SELECT EXISTS(SELECT 1 FROM worker_heartbeats WHERE demo=$1 AND updated_at>now()-interval '40 seconds') AS online",[config.DEMO_MODE])).rows[0].online;
-  return {mode:config.DEMO_MODE?'DEMO':'LIVE',initialized,workerOnline:worker,providers:{x:config.DEMO_MODE||!!config.X_API_BEARER_TOKEN,solana:!!config.HELIUS_API_KEY},limits:{followers:config.SCAN_MAX_FOLLOWERS,pages:config.SCAN_MAX_PAGES,daily:config.SCAN_DAILY_LIMIT},limitations:config.DEMO_MODE?['Synthetic DEMO data']:['X endpoint access depends on your provider account','Unique reach and PnL require additional verified data']};
+  return {mode:config.DEMO_MODE?'DEMO':'LIVE',initialized,workerOnline:worker,providers:{x:config.DEMO_MODE||!!config.X_API_BEARER_TOKEN,solana:!!config.HELIUS_API_KEY},limits:{followers:scanBudget().deepFollowers,quickFollowers:scanBudget().quickFollowers,pages:config.SCAN_MAX_PAGES,daily:config.SCAN_DAILY_LIMIT},limitations:config.DEMO_MODE?['Synthetic DEMO data']:['X endpoint access depends on your provider account','Unique reach and PnL require additional verified data']};
  });
  const dummyHash=hashPassword('unused-constant-time-check');
  app.post('/v1/auth/login',{config:{rateLimit:{max:5,timeWindow:'1 minute'}}},async(request,reply)=>{
@@ -62,10 +63,11 @@ export async function createApp(dependencies:Dependencies={}) {
   secured.post('/v1/auth/logout',async request=>{await query('UPDATE sessions SET revoked=true WHERE id=$1',[identity(request).sid]);return {ok:true};});
   secured.get('/v1/me',async request=>{
    const usage=(await query("SELECT count(*)::int AS used FROM scan_requests WHERE user_id=$1 AND created_at>=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'",[identity(request).sub])).rows[0].used;
-   return {id:identity(request).sub,mode:config.DEMO_MODE?'DEMO':'LIVE',dailyLimit:config.SCAN_DAILY_LIMIT,used:usage};
+   return {id:identity(request).sub,mode:config.DEMO_MODE?'DEMO':'LIVE',dailyLimit:config.SCAN_DAILY_LIMIT,used:usage,budget:scanBudget()};
   });
   secured.post('/v1/scans',async(request,reply)=>{
    const body=scanSchema.parse(request.body);
+   if(body.mode==='deep'&&!config.DEMO_MODE&&!body.confirmPaid)throw new HttpError(400,'paid_scan_confirmation_required');
    const created=await requestScan(identity(request).sub,body.username,body.mode);
    if(created.dispatch)try{await dispatch(created.jobId,created.generation);}catch{app.log.warn({jobId:created.jobId},'Saved scan will be dispatched after queue recovery');}
    return reply.code(202).send({id:created.id});
@@ -75,7 +77,8 @@ export async function createApp(dependencies:Dependencies={}) {
    const latest=(await query('SELECT r.id FROM scan_requests r JOIN scan_jobs j ON j.id=r.job_id WHERE r.user_id=$1 AND lower(coalesce(r.username,j.username))=$2 AND j.demo=$3 ORDER BY r.created_at DESC LIMIT 1',[identity(request).sub,username,config.DEMO_MODE])).rows[0];
    return latest?readScan(latest.id,identity(request).sub):null;
   });
-  secured.get('/v1/history',async request=>(await query('SELECT r.id,coalesce(r.username,j.username) AS username,j.status,j.result->\'score\' AS score,r.created_at FROM scan_requests r JOIN scan_jobs j ON j.id=r.job_id WHERE r.user_id=$1 AND j.demo=$2 ORDER BY r.created_at DESC LIMIT 30',[identity(request).sub,config.DEMO_MODE])).rows);
+  secured.post<{Params:{id:string}}>('/v1/scans/:id/cancel',async request=>cancelScan(z.string().uuid().parse(request.params.id),identity(request).sub));
+  secured.get('/v1/history',async request=>(await query('SELECT r.id,coalesce(r.username,j.username) AS username,CASE WHEN r.cancelled_at IS NOT NULL THEN \'cancelled\' ELSE j.status END AS status,j.result->\'score\' AS score,r.created_at FROM scan_requests r JOIN scan_jobs j ON j.id=r.job_id WHERE r.user_id=$1 AND j.demo=$2 ORDER BY r.created_at DESC LIMIT 30',[identity(request).sub,config.DEMO_MODE])).rows);
   for(const suffix of ['','/audience','/report'])secured.get<{Params:{id:string}}>(`/v1/scans/:id${suffix}`,async(request,reply)=>{
    const scan=await readScan(z.string().uuid().parse(request.params.id),identity(request).sub);
    if(!scan)return reply.code(404).send({error:'scan_not_found'});

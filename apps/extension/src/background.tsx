@@ -58,8 +58,9 @@ chrome.runtime.onMessage.addListener((raw,sender,respond)=>{
     return fetchApi('/v1/scans/current?username='+encodeURIComponent(message.username));
    case 'SCAN':
     if(content&&profileRoute(url!.pathname)!==message.username)throw Error('Profile mismatch');
-    return fetchApi('/v1/scans',{username:message.username,mode:message.mode});
+    return fetchApi('/v1/scans',{username:message.username,mode:message.mode,confirmPaid:message.confirmPaid});
    case 'GET_SCAN':return fetchApi('/v1/scans/'+message.id);
+   case 'CANCEL_SCAN':return fetchApi('/v1/scans/'+message.id+'/cancel',{});
    case 'REPORT':await chrome.tabs.create({url:chrome.runtime.getURL('report.html?id='+message.id)});return {ok:true};
    case 'OPTIONS':await chrome.runtime.openOptionsPage();return {ok:true};
   }

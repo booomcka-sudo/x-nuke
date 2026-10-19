@@ -35,7 +35,7 @@ function App() {
   const request=generation.current;
   void send<ScanView|null>({type:'CURRENT',username}).then(current=>{
    if(request!==generation.current)return;
-   if(current)setId(current.id);else void start('quick');
+   if(current)setId(current.id);
   }).catch(cause=>{if(request===generation.current)setError(explainError(cause));});
  },[username,open]);
  async function start(mode:'quick'|'deep') {
@@ -43,14 +43,14 @@ function App() {
   const request=++generation.current;const requested=username;
   setBusy(true);setError('');
   try{
-   const response=await send<{id:string}>({type:'SCAN',username:requested,mode});
+   const response=await send<{id:string}>({type:'SCAN',username:requested,mode,confirmPaid:mode==='deep'});
    if(request!==generation.current||profileRoute(location.pathname)!==requested)return;
    setId(response.id);reload();
   }catch(cause){if(request===generation.current)setError(explainError(cause));}
   finally{if(request===generation.current)setBusy(false);}
  }
  if(!username)return null;
- return <>{!open&&<button className="scan-launcher" onClick={()=>setOpen(true)}><Icon name="nuke"/>Scan @{username}</button>}{open&&<Panel scan={scan?.username===username?scan:null} username={username} error={error||pollError} busy={busy} onClose={()=>setOpen(false)} onScan={()=>void start('quick')} onDeep={()=>void start('deep')}/>}</>;
+ return <>{!open&&<button className="scan-launcher" onClick={()=>setOpen(true)}><Icon name="nuke"/>Scan @{username}</button>}{open&&<Panel scan={scan?.username===username?scan:null} username={username} error={error||pollError} busy={busy} onClose={()=>setOpen(false)} onScan={()=>void start('quick')} onDeep={()=>void start('deep')} onStop={()=>{if(id)void send({type:'CANCEL_SCAN',id}).then(reload).catch(cause=>setError(explainError(cause)));}}/>}</>;
 }
 if(!document.getElementById(hostId)) {
  const host=document.createElement('div');host.id=hostId;document.documentElement.append(host);

@@ -23,7 +23,7 @@ describe.skipIf(process.env.RUN_DATABASE_TESTS!=='true')('PostgreSQL + API + per
   database=await import('../packages/database/src/index.js');processor=await import('../apps/worker/src/processor.js');
   await database.query('DROP SCHEMA public CASCADE');await database.query('CREATE SCHEMA public');
   await database.query('CREATE TABLE migrations(name text PRIMARY KEY)');
-  for(const migration of ['0001','0002']){await database.query(await readFile(new URL('../packages/database/migrations/'+migration+'.sql',import.meta.url),'utf8'));await database.query('INSERT INTO migrations VALUES($1)',[migration]);}
+  for(const migration of ['0001','0002','0003']){await database.query(await readFile(new URL('../packages/database/migrations/'+migration+'.sql',import.meta.url),'utf8'));await database.query('INSERT INTO migrations VALUES($1)',[migration]);}
   const {bootstrapAccount}=await import('../apps/api/src/users.js');
   expect(await bootstrapAccount()).toBe('unconfigured');
   const bootstrapped=await Promise.all([bootstrapAccount('first@example.test',password),bootstrapAccount('first@example.test',password)]);expect(bootstrapped.sort()).toEqual(['created','exists']);
@@ -33,6 +33,34 @@ describe.skipIf(process.env.RUN_DATABASE_TESTS!=='true')('PostgreSQL + API + per
   for(const email of emails){const response=await app.inject({method:'POST',url:'/v1/auth/login',payload:{email,password}});expect(response.statusCode).toBe(200);tokens.push(response.json<{accessToken:string}>().accessToken);}
  });
  afterAll(async()=>{await app?.close();await database?.pool.end();});
+ it('stops after an in-flight page, keeps the committed checkpoint and rejects foreign cancellation',async()=>{
+  const id=await scan('stoptest','deep');const source=new DemoX();let pages=0;let release!:()=>void;let entered!:()=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;});const waiting=new Promise<void>(resolve=>{entered=resolve;});
+  const wrapped:XDataProvider={getProfile:name=>source.getProfile(name),getCapabilities:()=>source.getCapabilities(),getRecentPosts:()=>source.getRecentPosts(),getFollowersPage:async(profileId,cursor,limit)=>{pages++;if(pages===2){entered();await held;}return source.getFollowersPage(profileId,cursor,limit);}};
+  const running=run(id,wrapped);await waiting;
+  expect((await app.inject({method:'POST',url:'/v1/scans/'+id+'/cancel',headers:{authorization:'Bearer '+tokens[1]}})).statusCode).toBe(404);
+  const stopped=await app.inject({method:'POST',url:'/v1/scans/'+id+'/cancel',headers:{authorization:'Bearer '+tokens[0]}});expect(stopped.statusCode).toBe(200);expect(stopped.json().status).toBe('cancelled');
+  release();await running;await run(id,wrapped);const saved=await view(id);expect(saved.processed).toBe(50);expect(saved.result?.denominator).toBe(50);expect(saved.status).toBe('cancelled');expect(pages).toBe(2);
+  const resumed=await scan('stoptest');expect(resumed).not.toBe(id);await run(resumed,wrapped);expect((await view(resumed)).processed).toBe(50);expect(pages).toBe(2);
+ });
+ it('cancels only the requesting user when another user still needs the shared analysis',async()=>{
+  const first=await scan('sharedstop');const second=await scan('sharedstop','quick',1);
+  await app.inject({method:'POST',url:'/v1/scans/'+first+'/cancel',headers:{authorization:'Bearer '+tokens[0]}});
+  const shared=await view(second,1);const generation=(await database.query('SELECT generation FROM scan_jobs WHERE id=$1',[shared.jobId])).rows[0].generation;
+  await processor.processAnalysis({data:{id:shared.jobId,generation},attemptsMade:0},new DemoX());
+  expect((await view(first)).status).toBe('cancelled');expect((await view(second,1)).status).toBe('complete');
+ });
+ it('limits LIVE reads on the wire, omits posts and requires explicit Deep confirmation',async()=>{
+  const {config}=await import('../packages/shared/src/config.js');const original=config.DEMO_MODE;config.DEMO_MODE=false;
+  try {
+   const source=new DemoX();const sizes:number[]=[];let posts=0;
+   const wrapped:XDataProvider={getProfile:name=>source.getProfile(name),getCapabilities:()=>source.getCapabilities(),getRecentPosts:async()=>{posts++;return [];},getFollowersPage:async(profileId,cursor,limit)=>{sizes.push(limit!);return source.getFollowersPage(profileId,cursor,limit);}};
+   const id=await scan('livebudget');await run(id,wrapped);expect((await view(id)).processed).toBe(5);expect(sizes).toEqual([5]);expect(posts).toBe(0);
+   const denied=await app.inject({method:'POST',url:'/v1/scans',headers:{authorization:'Bearer '+tokens[0]},payload:{username:'livebudget',mode:'deep'}});expect(denied.statusCode).toBe(400);
+   const accepted=await app.inject({method:'POST',url:'/v1/scans',headers:{authorization:'Bearer '+tokens[0]},payload:{username:'livebudget',mode:'deep',confirmPaid:true}});expect(accepted.statusCode).toBe(202);
+   await run(accepted.json().id,wrapped);expect((await view(accepted.json().id)).processed).toBe(20);expect(sizes).toEqual([5,10,5]);expect(posts).toBe(0);
+  }finally{config.DEMO_MODE=original;}
+ });
  it('reports service readiness, private account setup and unauthorized access',async()=>{
   expect((await app.inject('/health/ready')).statusCode).toBe(200);
   const status=(await app.inject('/v1/status')).json();expect(status.initialized).toBe(true);expect(status.mode).toBe('DEMO');expect(status.workerOnline).toBe(false);

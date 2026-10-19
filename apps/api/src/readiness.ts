@@ -5,7 +5,7 @@ interface ReadinessDependencies {
 export async function checkReadiness(dependencies:ReadinessDependencies) {
  let stage='database_migrations';
  try {
-  const migration=await dependencies.database("SELECT name FROM migrations WHERE name='0002'");
+  const migration=await dependencies.database("SELECT name FROM migrations WHERE name='0003'");
   if(!migration.rowCount)return {ok:false as const,reason:'database_migrations_required',stage,code:'missing_migration'};
   stage='database_schema';
   await dependencies.database('SELECT 1 FROM users,worker_heartbeats LIMIT 0');
